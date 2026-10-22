@@ -1,3 +1,4 @@
+ 
 name: Edit Armbian image
 
 on:
@@ -58,8 +59,8 @@ jobs:
       - name: Publish as release
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
         run: |
           gh release create "edited-${{ github.run_number }}" edited.img.xz \
             --title "Edited image ${{ github.run_number }}" \
             --notes "DTB: ${{ inputs.dtb }}"
-            
