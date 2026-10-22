@@ -1,0 +1,65 @@
+name: Edit Armbian image
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_url:
+        description: 'Direct link to the Armbian .img.xz file'
+        required: true
+      dtb:
+        description: 'DTB file name inside boot/dtb/allwinner'
+        required: true
+        default: 'sun50i-h618-orangepi-zero3.dtb'
+
+permissions:
+  contents: write
+
+jobs:
+  edit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download and unpack image
+        run: |
+          curl -L -o image.img.xz "${{ inputs.image_url }}"
+          unxz image.img.xz
+          ls -lh image.img
+
+      - name: Mount image
+        run: |
+          LOOP=$(sudo losetup --find --show --partscan image.img)
+          echo "LOOP=$LOOP" >> $GITHUB_ENV
+          sudo mkdir -p /mnt/img
+          sudo mount ${LOOP}p1 /mnt/img
+          echo "Available H618 DTB files:"
+          ls /mnt/img/boot/dtb/allwinner | grep -i h618 || true
+
+      - name: Set DTB
+        run: |
+          F=/mnt/img/boot/armbianEnv.txt
+          test -f /mnt/img/boot/dtb/allwinner/${{ inputs.dtb }}
+          if grep -q '^fdtfile=' $F; then
+            sudo sed -i "s#^fdtfile=.*#fdtfile=allwinner/${{ inputs.dtb }}#" $F
+          else
+            echo "fdtfile=allwinner/${{ inputs.dtb }}" | sudo tee -a $F
+          fi
+          echo "---- armbianEnv.txt ----"
+          cat $F
+          echo "---- boot folder ----"
+          ls /mnt/img/boot | head -50
+
+      - name: Unmount and compress
+        run: |
+          sudo umount /mnt/img
+          sudo losetup -d $LOOP
+          mv image.img edited.img
+          xz -T0 -3 edited.img
+          ls -lh edited.img.xz
+
+      - name: Publish as release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "edited-${{ github.run_number }}" edited.img.xz \
+            --title "Edited image ${{ github.run_number }}" \
+            --notes "DTB: ${{ inputs.dtb }}"
+            
